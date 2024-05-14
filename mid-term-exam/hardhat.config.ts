@@ -1,11 +1,13 @@
 import { HardhatUserConfig } from "hardhat/config";
-import "@nomicfoundation/hardhat-toolbox";
-import "@nomicfoundation/hardhat-ethers";
-import "@openzeppelin/hardhat-upgrades";
 import "hardhat-deploy";
-import "hardhat-deploy-ethers";
+import "@openzeppelin/hardhat-upgrades";
+import "@nomicfoundation/hardhat-toolbox";
+import "@nomicfoundation/hardhat-verify";
 
-const config: HardhatUserConfig = {
+import { config } from "dotenv";
+config();
+
+const hardhatConfig: HardhatUserConfig = {
   solidity: "0.8.24",
   namedAccounts: {
     deployer: {
@@ -25,4 +27,4 @@ const config: HardhatUserConfig = {
     },
   }};
 
-export default config;
+export default hardhatConfig;

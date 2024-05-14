@@ -1,44 +1,48 @@
+import { ethers, upgrades } from "hardhat";
+import { loadFixture } from "@nomicfoundation/hardhat-network-helpers";
+import { it } from "mocha";
 import { expect } from "chai";
-import { deployments, ethers, upgrades } from "hardhat";
-import { loadFixture } from "@nomicfoundation/hardhat-toolbox/network-helpers";
-import hre from "hardhat";
+import { Swapper } from "../typechain-types";
+import { BaseContract } from "ethers";
 
 describe("Swapper contract", function () {
 
   async function deploySwapperFixture() {
-    // const [owner, otherAccount] = await hre.ethers.getSigners();
+    const Swapper = await ethers.getContractFactory("Swapper");
+    const [owner, treasury, sender, receiver] = await ethers.getSigners();
 
-    // const Swapper = await hre.ethers.getContractFactory("Swapper");
-    // const lock = await Swapper.deploy([owner.address, owner.address], {  });
+    const swapper = (await upgrades.deployProxy(Swapper, [
+      owner.address,
+      treasury.address,
+    ])) as BaseContract as Swapper;
+    await swapper.waitForDeployment();
 
-    const [owner, addr1, addr2] = await ethers.getSigners();
-    const { deploy } = deployments;
+    // console.log(owner.address)
+    // const swapperResult = await deploy("Swapper", {
+    //   from: owner.address,
+    //   args: [],
+    //   log: true,
+    //   deterministicDeployment: false,
+    //   proxy: {
+    //     proxyContract: "OptimizedTransparentProxy",
+    //     owner: owner.address,
+    //     execute: {
+    //       methodName: "initialize",
+    //       args: [owner.address, owner.address],
+    //     },
+    //   },
+    // });
 
-    const swapperResult = await deploy("Swapper", {
-      from: owner.address,
-      args: [],
-      log: true,
-      deterministicDeployment: false,
-      proxy: {
-        proxyContract: "OptimizedTransparentProxy",
-        owner: owner.address,
-        execute: {
-          methodName: "initialize",
-          args: [owner.address, owner.address],
-        },
-      },
-    });
-
-    console.log(swapperResult);
+    // console.log(swapperResult);
 
     // const swapper = new ethers.Contract(swapperResult.address, swapperResult.abi);
 
-    return { swapperResult, owner, treasury: owner, addr1, addr2 };
+    return { swapper };
   }
 
   describe("Deployment", function () {
     it("Should deploy success", async function () {
-      const {  } = await loadFixture(deploySwapperFixture);
+      const { swapper } = await loadFixture(deploySwapperFixture);
 
       // console.info(await swapper.getAddress());
       // console.info(await swapper.);

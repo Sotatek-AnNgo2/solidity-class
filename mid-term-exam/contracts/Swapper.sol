@@ -1,19 +1,21 @@
 pragma solidity ^0.8.24;
 
-import "@openzeppelin/contracts/token/ERC20/ERC20.sol";
+import "@openzeppelin/contracts/token/ERC20/IERC20.sol";
 import "@openzeppelin/contracts-upgradeable/access/OwnableUpgradeable.sol";
 import "@openzeppelin/contracts-upgradeable/utils/ReentrancyGuardUpgradeable.sol";
+import "@openzeppelin/contracts/token/ERC20/utils/SafeERC20.sol";
 
 contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
+  using SafeERC20 for IERC20;
+
   struct Request {
     address fromAddress;
     address toAddress;
     address fromToken;
     address toToken;
-    uint fromReceive;
-    uint toReceive;
+    uint fromAmount;
+    uint toAmount;
     Status status;
-    // uint amount;
   }
   enum Status {
     CREATED,
@@ -23,102 +25,87 @@ contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
   }
 
   address private treasury;
+  uint8 public fee;
   uint private requestCount;
   mapping (uint => Request) private requests;
-  mapping (uint => uint) private exchangeRates;
-  mapping (uint => uint) private exchangeFees;
-  uint256 public constant DECIMALS = 8;
 
-
-  event ExchangeRateAndFee(address _fromAddres, address _toAddress, uint _exchangeRate, uint _exchangeFee);
-  event RequestCreated(uint _requestId, address _fromAddres, address _toAddress, address _fromToken, address _toToken, uint amount);
+  event FeeUpdated(uint _fee);
+  event TreasuryUpdated(address _treasury);
+  event RequestCreated(
+    uint _requestId,
+    address _fromAddres,
+    address _toAddress,
+    address _fromToken,
+    address _toToken,
+    uint _fromAmount,
+    uint _toAmount
+  );
   event RequestCancelled(uint _requestId);
   event RequestApproved(uint _requestId);
   event RequestRejected(uint _requestId);
 
-  function initialize(address _owner, address _treasury) public initializer {
-    require(_owner != address(0) && _treasury != address(0), "Params wrong");
+  modifier noZeroAddress(address _address) {
+    require(_address != address(0), "Zero address no allow");
+    _;
+  }
+
+  function initialize(address _owner, address _treasury)
+    public initializer noZeroAddress(_owner) noZeroAddress(_treasury) {
     treasury = _treasury;
   }
 
-  function getTreasury() external view returns(address) {
-    return treasury;
+  function setFee(uint8 _fee) external onlyOwner {
+    fee = _fee;
+
+    emit FeeUpdated(_fee);
   }
 
-  function getTokenHash(address _fromToken, address _toToken) internal pure returns (uint tokenHash) {
-    tokenHash = uint(keccak256(abi.encodePacked(_fromToken, _toToken)));
+  function updateTreasury(address _treasury) external onlyOwner {
+      require(_treasury != address(0), "Treasury address cannot be zero");
+      treasury = _treasury;
+      emit TreasuryUpdated(_treasury);
   }
 
-  function getExchangeRate(address _fromToken, address _toToken) public view returns (uint exchangeRate) {
-    uint tokenHash = getTokenHash(_fromToken, _toToken);
-    exchangeRate = exchangeRates[tokenHash];
-  }
-
-  function calculateTransferAmount(address _fromToken, address _toToken, uint _amount) internal view returns (uint fromReceive, uint toReceive) {
-    ERC20 fromToken = ERC20(_fromToken);
-    ERC20 toToken = ERC20(_toToken);
-
-    uint fromDecimal = fromToken.decimals();
-    uint toDecimal = toToken.decimals();
-    uint exchangeRate = getExchangeRate(_fromToken, _toToken);
-
-    fromReceive = _amount * exchangeRate / 10 ** (DECIMALS + toDecimal - fromDecimal);
-    toReceive = _amount;
-  }
-
-  function getExchangeFee(address _fromToken, address _toToken) public view returns (uint exchangeFee) {
-    uint tokenHash = getTokenHash(_fromToken, _toToken);
-    exchangeFee = exchangeFees[tokenHash];
-  }
-
-  function setExchangeRateAndFee(address _fromToken, address _toToken, uint _exchangeRate, uint _exchangeFee) external onlyOwner {
-    require(_exchangeRate != 0, "");
-    uint tokenHash = getTokenHash(_fromToken, _toToken);
-
-    exchangeRates[tokenHash] = _exchangeRate;
-    exchangeFees[tokenHash] = _exchangeFee;
-
-    emit ExchangeRateAndFee(_fromToken, _toToken, _exchangeRate, _exchangeFee);
-  }
-
-  function createRequest(address _toAddress, address _fromToken, address _toToken, uint _amount) external nonReentrant {
-    require(getExchangeRate(_fromToken, _toToken) != 0, "Token not support");
-
-    ERC20 fromToken = ERC20(_fromToken);
-    fromToken.transferFrom(msg.sender, address(this), _amount);
+  function createRequest(address _toAddress, address _fromToken, address _toToken, uint _fromAmount, uint _toAmount)
+    external nonReentrant noZeroAddress(_toAddress) noZeroAddress(_fromToken) noZeroAddress(_toToken) {
+    IERC20 fromToken = IERC20(_fromToken);
+    fromToken.safeTransferFrom(msg.sender, address(this), _fromAmount);
     requestCount++;
-    (uint fromReceive, uint toReceive) = calculateTransferAmount(_fromToken, _toToken, _amount);
-    requests[requestCount] = Request(msg.sender, _toAddress, _fromToken, _toToken, fromReceive, toReceive, Status.CREATED);
+    requests[requestCount] = Request(msg.sender, _toAddress, _fromToken, _toToken, _fromAmount, _toAmount, Status.CREATED);
 
-    emit RequestCreated(requestCount, msg.sender, _toAddress, _fromToken, _toToken, _amount);
+    emit RequestCreated(requestCount, msg.sender, _toAddress, _fromToken, _toToken, _fromAmount, _toAmount);
 
   }
 
   function cancelRequest(uint _requestId) external nonReentrant {
     Request storage request = requests[_requestId];
-    require(request.fromAddress == msg.sender && request.status == Status.CREATED, "Must be creator");
+    require(request.fromAddress == msg.sender && request.status == Status.CREATED, "Cannot cancel this request");
 
     request.status = Status.CANCELLED;
-    ERC20 fromToken = ERC20(request.fromToken);
-    fromToken.transferFrom(address(this), request.fromAddress, request.toReceive);
+    IERC20 fromToken = IERC20(request.fromToken);
+    fromToken.safeTransferFrom(address(this), request.fromAddress, request.fromAmount);
 
     emit RequestCancelled(_requestId);
   }
 
   function approveRequest(uint _requestId) external nonReentrant {
     Request storage request = requests[_requestId];
-    require(request.status == Status.CREATED && msg.sender == request.toAddress, "Cannot approve");
+    require(request.status == Status.CREATED && msg.sender == request.toAddress, "Cannot approve this request");
 
-    ERC20 fromToken = ERC20(request.fromToken);
-    ERC20 toToken = ERC20(request.toToken);
-    uint exchangeFee = getExchangeFee(request.fromToken, request.toToken);
-    // (uint fromReceive, uint toReceive) = calculateTransferAmount(request.fromToken, request.toToken, request.amount);
-    uint fromReceiveFee = request.fromReceive * exchangeFee / 10 ** (DECIMALS + 2);
-    uint toReceiveFee = request.toReceive * exchangeFee / 10 ** (DECIMALS + 2);
+    IERC20 fromToken = IERC20(request.fromToken);
+    IERC20 toToken = IERC20(request.toToken);
+    uint8 feePercent = fee;
+    address treasuryAddress = treasury;
 
-    fromToken.transferFrom(address(this), request.toAddress, request.toReceive - toReceiveFee);
-    toToken.transferFrom(request.toAddress, address(this), fromReceiveFee);
-    toToken.transferFrom(request.toAddress, request.fromAddress, request.fromReceive - fromReceiveFee);
+    uint netFromAmount = request.fromAmount * (100 - feePercent) / 100;
+    uint netToAmount = request.toAmount * (100 - feePercent) / 100;
+
+    fromToken.safeTransfer(request.toAddress, netFromAmount);
+    fromToken.safeTransfer(treasuryAddress, request.fromAmount - netFromAmount);
+
+    toToken.safeTransferFrom(request.toAddress, request.fromAddress, netToAmount);
+    toToken.safeTransferFrom(request.toAddress, treasuryAddress, request.toAmount - netToAmount);
+
     request.status = Status.APPROVED;
 
     emit RequestApproved(_requestId);
@@ -126,12 +113,20 @@ contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
   function rejectRequest(uint _requestId) external nonReentrant {
     Request storage request = requests[_requestId];
-    require(request.toAddress == msg.sender && request.status == Status.CREATED, "Must be creator");
+    require(request.toAddress == msg.sender && request.status == Status.CREATED, "Cannot reject this request");
 
     request.status = Status.REJECTED;
-    ERC20 fromToken = ERC20(request.fromToken);
-    fromToken.transferFrom(address(this), request.fromAddress, request.toReceive);
+    IERC20 fromToken = IERC20(request.fromToken);
+    fromToken.safeTransferFrom(address(this), request.fromAddress, request.fromAmount);
 
     emit RequestRejected(_requestId);
   }
+
+    receive() external payable {
+      revert();
+    }
+
+    fallback() external payable {
+      revert();
+    }
 }
