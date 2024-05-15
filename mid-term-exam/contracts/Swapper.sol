@@ -24,10 +24,10 @@ contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     CANCELLED
   }
 
-  address private treasury;
+  address public treasury;
   uint8 public fee;
   uint private requestCount;
-  mapping (uint => Request) private requests;
+  mapping (uint => Request) public requests;
 
   event FeeUpdated(uint _fee);
   event TreasuryUpdated(address _treasury);
@@ -52,6 +52,7 @@ contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
   function initialize(address _owner, address _treasury)
     public initializer noZeroAddress(_owner) noZeroAddress(_treasury) {
     treasury = _treasury;
+    __Ownable_init(_owner);
   }
 
   function setFee(uint8 _fee) external onlyOwner {
