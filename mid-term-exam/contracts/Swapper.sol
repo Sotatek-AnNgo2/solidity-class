@@ -49,6 +49,10 @@ contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
     _;
   }
 
+  constructor() {
+    _disableInitializers();
+  }
+
   function initialize(address _owner, address _treasury)
     public initializer noZeroAddress(_owner) noZeroAddress(_treasury) {
     treasury = _treasury;
@@ -56,6 +60,7 @@ contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
   }
 
   function setFee(uint8 _fee) external onlyOwner {
+    require(_fee <= 100, "Fee not valid");
     fee = _fee;
 
     emit FeeUpdated(_fee);
@@ -84,7 +89,7 @@ contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     request.status = Status.CANCELLED;
     IERC20 fromToken = IERC20(request.fromToken);
-    fromToken.safeTransferFrom(address(this), request.fromAddress, request.fromAmount);
+    fromToken.safeTransfer(request.fromAddress, request.fromAmount);
 
     emit RequestCancelled(_requestId);
   }
@@ -118,7 +123,7 @@ contract Swapper is OwnableUpgradeable, ReentrancyGuardUpgradeable {
 
     request.status = Status.REJECTED;
     IERC20 fromToken = IERC20(request.fromToken);
-    fromToken.safeTransferFrom(address(this), request.fromAddress, request.fromAmount);
+    fromToken.safeTransfer(request.fromAddress, request.fromAmount);
 
     emit RequestRejected(_requestId);
   }

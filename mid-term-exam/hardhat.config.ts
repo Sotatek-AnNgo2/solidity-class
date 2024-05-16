@@ -13,9 +13,6 @@ const hardhatConfig: HardhatUserConfig = {
     deployer: {
       default: 0,
     },
-    dev: {
-      default: 1,
-    },
   },
   networks: {
     sepolia: {

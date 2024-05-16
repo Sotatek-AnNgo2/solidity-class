@@ -1,28 +1,29 @@
+import { DeployFunction } from "hardhat-deploy/types";
 import { HardhatRuntimeEnvironment } from "hardhat/types";
 
-const func = async function (
-  hre: HardhatRuntimeEnvironment
-): Promise<void> {
-  console.log(hre.network);
-  const { deployments, getNamedAccounts } = hre;
-  const { deploy } = deployments;
-  const { deployer } = await getNamedAccounts();
-  console.log("deployer: ", deployer);
+import { config } from "dotenv";
+config();
 
-  await deploy("Swapper", {
+const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
+  const { deployer } = await hre.getNamedAccounts();
+  const { deploy } = hre.deployments;
+
+  const swapper = await deploy("Swapper", {
     from: deployer,
-    args: [],
     log: true,
-    deterministicDeployment: false,
     proxy: {
-      proxyContract: "OptimizedTransparentProxy",
-      owner: deployer,
+      proxyContract: "OpenZeppelinTransparentProxy",
       execute: {
-        methodName: "initialize",
-        args: [deployer, deployer],
+        init: {
+          methodName: "initialize",
+          args: [process.env.OWNER_ADDRESS, process.env.TREASURY_ADDRESS],
+        },
       },
     },
   });
-};
 
+  console.log(`Swap contract deployed: `, swapper.address);
+};
 export default func;
+func.id = "deploy_swap"; // id required to prevent reexecution
+func.tags = ["swap"];
