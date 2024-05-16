@@ -22,6 +22,15 @@ const hardhatConfig: HardhatUserConfig = {
         `9e38521f2352331888f44bcee1103d680f2833bc143bcb8c1e86bb71e66f33ba`,
       ],
     },
-  }};
+  },
+  sourcify: {
+    enabled: false,
+  },
+  etherscan: {
+    apiKey: {
+      sepolia: 'YNT1GHTV5DXIF7QU63WTNURWPKW1Y99XE7'
+    }
+  }
+};
 
 export default hardhatConfig;

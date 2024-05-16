@@ -5,7 +5,7 @@ import { config } from "dotenv";
 config();
 
 const func: DeployFunction = async function (hre: HardhatRuntimeEnvironment) {
-  const { deployer } = await hre.getNamedAccounts();
+  const { deployer, ...rest } = await hre.getNamedAccounts();
   const { deploy } = hre.deployments;
 
   const swapper = await deploy("Swapper", {
